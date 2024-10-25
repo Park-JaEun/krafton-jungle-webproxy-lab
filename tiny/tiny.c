@@ -4,6 +4,8 @@
  *          간단한 HTTP/1.0 웹 서버
  * 
  * CSAPP 11.6-c 문제 - TINY의 출력을 조사해서 여러분이 사용하는 브라우저의 HTTP 버전을 결정하라.
+ * CSAPP 11.7 문제 - TINY를 확장해서 MPG 비디오 파일을 처리하도록 하시오. 실제 브라우저를 사용해서 여러분의 결과를 체크하시오.
+ * 
  */
 #include "csapp.h"
 
@@ -171,11 +173,18 @@ void serve_static(int fd, char *filename, int filesize, char *version)
 
     /* 파일 타입 결정 및 응답 헤더 작성 */
     get_filetype(filename, filetype);
-    sprintf(buf, "%s 200 OK\r\n", version); // 요청한 HTTP 버전에 맞춘 응답
+    sprintf(buf, "%s 200 OK\r\n", version);
     sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+    sprintf(buf, "%sContent-type: %s\r\n", buf, filetype);
+
+    /* 비디오 파일을 브라우저에 표시하도록 Content-Disposition 헤더 추가 */
+    if (strcmp(filetype, "video/mov") == 0) {
+        sprintf(buf, "%sContent-Disposition: inline\r\n", buf);
+    }
+    
+    sprintf(buf, "%s\r\n", buf);
     Rio_writen(fd, buf, strlen(buf));
 
     /* 파일을 메모리에 매핑하여 클라이언트에게 전송 */
@@ -183,9 +192,8 @@ void serve_static(int fd, char *filename, int filesize, char *version)
     srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
     Close(srcfd);
     Rio_writen(fd, srcp, filesize);
-    Munmap(srcp, filesize);              
+    Munmap(srcp, filesize);
 }
-
 /*
  * get_filetype - 파일 이름으로부터 파일 타입을 결정
  */
@@ -199,9 +207,11 @@ void get_filetype(char *filename, char *filetype)
         strcpy(filetype, "image/png");
     else if (strstr(filename, ".jpg"))
         strcpy(filetype, "image/jpeg");
+    else if (strstr(filename, ".mov"))           // MPG 파일을 위한 타입 추가
+        strcpy(filetype, "video/mov");
     else
         strcpy(filetype, "text/plain");
-}  
+}
 
 /*
  * serve_dynamic - CGI 프로그램을 실행하여 동적 콘텐츠 제공

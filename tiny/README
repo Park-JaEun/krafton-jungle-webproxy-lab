@@ -46,7 +46,21 @@ Files:
 3. **결과 반환**:
     - 올바르게 파싱된 경우, `a + b`의 결과를 HTML로 반환하여 클라이언트에 전송한다.
 
-### 11.6-c 문제
-tiny.c의 doit 함수에서 HTTP 버전을 확인하고 출력하여 서버 응답의 버전을 클라이언트가 요청한 HTTP 버전으로 맞추도록 변경
+### 11.6-c 문제 
+#### tiny.c의 doit 함수에서 HTTP 버전을 확인하고 출력하여 서버 응답의 버전을 클라이언트가 요청한 HTTP 버전으로 맞추도록 변경
 
 출력 예시 : Client HTTP version: HTTP/1.1
+
+1. **HTTP 버전 파싱**: 
+   - doit 함수에서 요청 라인의 세 번째 값으로 version 변수를 파싱하여 HTTP 버전을 저장한다.
+printf("Client HTTP version: %s\n", version);로 클라이언트가 사용하는 HTTP 버전을 출력한다.
+2. **버전에 따른 응답**:
+   - 응답을 생성할 때 HTTP/1.0과 같은 고정 값을 사용하는 대신, version 변수를 사용하여 클라이언트의 HTTP 버전에 맞춘다. 이를 통해 클라이언트의 HTTP 버전 요구에 맞는 응답을 제공한다.
+3. **함수 시그니처 수정**:
+   - serve_static, serve_dynamic, clienterror 함수에 version 매개변수를 추가하여 각 함수가 클라이언트의 HTTP 버전 정보를 사용할 수 있게 한다.
+
+### CSAPP 11.7 문제
+#### TINY를 확장해서 MPG 비디오 파일을 처리하도록 하시오. 실제 브라우저를 사용해서 여러분의 결과를 체크하시오.
+
+1. **MIME 타입 추가**: 
+   - get_filetype 함수에서 MPG 파일 확장자를 확인하고 맞는 MIME 타입(video/mpeg)을 설정하도록 한다.
