@@ -29,6 +29,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#define _POSIX_C_SOURCE 200112L
+#define _XOPEN_SOURCE 600
+
 /* Default file permissions are DEF_MODE & ~DEF_UMASK */
 /* $begin createmasks */
 #define DEF_MODE   S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
