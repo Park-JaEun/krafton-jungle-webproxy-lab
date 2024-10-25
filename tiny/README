@@ -36,3 +36,17 @@ Files:
   cgi-bin/adder.c	CGI program that adds two numbers
   cgi-bin/Makefile	Makefile for adder.c
 
+### `adder.c` 코드 설명
+
+1. **쿼리 스트링 가져오기**:
+    - `getenv("QUERY_STRING")`를 통해 URL에 포함된 쿼리 스트링(`?1&2`)을 가져온다.
+2. **파라미터 파싱**:
+    - `sscanf` 함수로 `query_string`에서 두 숫자를 추출하여 각각 `a`와 `b`에 저장한다.
+    - 파라미터가 잘못되었거나 누락된 경우, 오류 메시지를 HTML 형식으로 출력한다.
+3. **결과 반환**:
+    - 올바르게 파싱된 경우, `a + b`의 결과를 HTML로 반환하여 클라이언트에 전송한다.
+
+### 11.6-c 문제
+tiny.c의 doit 함수에서 HTTP 버전을 확인하고 출력하여 서버 응답의 버전을 클라이언트가 요청한 HTTP 버전으로 맞추도록 변경
+
+출력 예시 : Client HTTP version: HTTP/1.1

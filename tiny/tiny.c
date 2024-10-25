@@ -2,6 +2,8 @@
 /*
  * tiny.c - GET 메서드를 사용하여 정적 및 동적 콘텐츠를 제공하는
  *          간단한 HTTP/1.0 웹 서버
+ * 
+ * CSAPP 11.6-c 문제 - TINY의 출력을 조사해서 여러분이 사용하는 브라우저의 HTTP 버전을 결정하라.
  */
 #include "csapp.h"
 
@@ -9,11 +11,14 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+// void serve_static(int fd, char *filename, int filesize); // 기존 함수
+void serve_static(int fd, char *filename, int filesize, char *version);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
-void clienterror(int fd, char *cause, char *errnum, 
-                 char *shortmsg, char *longmsg);
+// void serve_dynamic(int fd, char *filename, char *cgiargs); // 기존 함수
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *version);
+// void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg); // 기존 함수
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, 
+                    char *longmsg, char *version); 
 
 int main(int argc, char **argv) 
 {
@@ -52,7 +57,7 @@ int main(int argc, char **argv)
  */
 void doit(int fd) 
 {
-    int is_static;
+   int is_static;
     struct stat sbuf;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char filename[MAXLINE], cgiargs[MAXLINE];
@@ -62,40 +67,48 @@ void doit(int fd)
     Rio_readinitb(&rio, fd);
     if (!Rio_readlineb(&rio, buf, MAXLINE)) 
         return;
-    printf("%s", buf);
-    sscanf(buf, "%s %s %s", method, uri, version);       
+    printf("%s", buf); // 요청 라인 출력
 
-    /* 지원안하는 메서드이면 오류 반환 */
+    /* 메서드, URI, HTTP 버전을 파싱 */
+    sscanf(buf, "%s %s %s", method, uri, version); // HTTP 버전 파싱 추가
+
+    /* HTTP 버전 출력 */
+    printf("Client HTTP version: %s\n", version);
+
+    /* 지원되지 않는 메서드 오류 처리 */
     if (strcasecmp(method, "GET")) {                     
         clienterror(fd, method, "501", "Not Implemented",
-                    "Tiny does not implement this method");
+                    "Tiny does not implement this method", version);
         return;
-    }                                                  
-    read_requesthdrs(&rio);                             
-
-    /* URI에서 파일이름과 CGI인자 추출 */
-    is_static = parse_uri(uri, filename, cgiargs);     
-    if (stat(filename, &sbuf) < 0) {                     
-        clienterror(fd, filename, "404", "Not found",
-                    "Tiny couldn't find this file");
-        return;
-    }                                                   
-
-    if (is_static) { /* 정적 */          
-        if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) { 
-            clienterror(fd, filename, "403", "Forbidden",
-                        "Tiny couldn't read the file");
-            return;
-        }
-        serve_static(fd, filename, sbuf.st_size);       
     }
-    else { /* 동적 */
-        if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) { 
+    
+    /* 요청 헤더 읽기 */
+    read_requesthdrs(&rio);
+
+    /* URI를 파싱하여 파일 이름 및 CGI 인자 추출 */
+    is_static = parse_uri(uri, filename, cgiargs);
+    if (stat(filename, &sbuf) < 0) {
+        clienterror(fd, filename, "404", "Not found",
+                    "Tiny couldn't find this file", version);
+        return;
+    }
+
+    /* 정적 또는 동적 콘텐츠 제공 */
+    if (is_static) {
+        if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
             clienterror(fd, filename, "403", "Forbidden",
-                        "Tiny couldn't run the CGI program");
+                        "Tiny couldn't read the file", version);
             return;
         }
-        serve_dynamic(fd, filename, cgiargs);      
+        serve_static(fd, filename, sbuf.st_size, version); // 수정: version 추가
+    }
+    else {
+        if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
+            clienterror(fd, filename, "403", "Forbidden",
+                        "Tiny couldn't run the CGI program", version);
+            return;
+        }
+        serve_dynamic(fd, filename, cgiargs, version); // 수정: version 추가
     }
 }
 
@@ -151,28 +164,26 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 /*
  * serve_static - 파일을 클라이언트에게 전송하여 정적 콘텐츠 제공
  */
-void serve_static(int fd, char *filename, int filesize) 
+void serve_static(int fd, char *filename, int filesize, char *version) 
 {
     int srcfd;
     char *srcp, filetype[MAXLINE], buf[MAXBUF];
- 
-    /* 클라이언트에게 응답 헤더 전송 */
-    get_filetype(filename, filetype);       
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");    
+
+    /* 파일 타입 결정 및 응답 헤더 작성 */
+    get_filetype(filename, filetype);
+    sprintf(buf, "%s 200 OK\r\n", version); // 요청한 HTTP 버전에 맞춘 응답
     sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
-    Rio_writen(fd, buf, strlen(buf));       
-    printf("Response headers:\n");
-    printf("%s", buf);
+    Rio_writen(fd, buf, strlen(buf));
 
     /* 파일을 메모리에 매핑하여 클라이언트에게 전송 */
-    srcfd = Open(filename, O_RDONLY, 0);    
+    srcfd = Open(filename, O_RDONLY, 0);
     srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
-    Close(srcfd);                        
-    Rio_writen(fd, srcp, filesize);        
-    Munmap(srcp, filesize);                
+    Close(srcfd);
+    Rio_writen(fd, srcp, filesize);
+    Munmap(srcp, filesize);              
 }
 
 /*
@@ -195,42 +206,44 @@ void get_filetype(char *filename, char *filetype)
 /*
  * serve_dynamic - CGI 프로그램을 실행하여 동적 콘텐츠 제공
  */
-void serve_dynamic(int fd, char *filename, char *cgiargs) 
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *version) 
 {
     char buf[MAXLINE], *emptylist[] = { NULL };
 
     /* HTTP 응답 헤더의 첫 부분 전송 */
-    sprintf(buf, "HTTP/1.0 200 OK\r\n"); 
+    sprintf(buf, "%s 200 OK\r\n", version); // 요청한 HTTP 버전에 맞춰 응답
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Server: Tiny Web Server\r\n");
     Rio_writen(fd, buf, strlen(buf));
+    sprintf(buf, "Connection: close\r\n");
+    Rio_writen(fd, buf, strlen(buf));
   
     if (Fork() == 0) { /* 자식 프로세스 생성 */ 
-        /* 실제 서버는 여기서 모든 CGI 환경 변수 설정 */
-        setenv("QUERY_STRING", cgiargs, 1); 
+        /* CGI 환경 변수 설정 */
+        setenv("QUERY_STRING", cgiargs, 1);
         Dup2(fd, STDOUT_FILENO);              /* 클라이언트로 표준 출력을 리다이렉트 */ 
         Execve(filename, emptylist, environ); /* CGI 프로그램 실행 */ 
     }
-    Wait(NULL); /* 부모 프로세스는 자식 프로세스 종료 대기 */ 
+    Wait(NULL); /* 부모 프로세스는 자식 프로세스 종료 대기 */
 }
 
 /*
  * clienterror - 클라이언트에게 오류 메시지 반환
  */
-void clienterror(int fd, char *cause, char *errnum, 
-                 char *shortmsg, char *longmsg) 
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, 
+                    char *longmsg, char *version) 
 {
     char buf[MAXLINE], body[MAXBUF];
 
-    /* HTTP 응답 본문 생성 */
+    /* 응답 본문 작성 */
     sprintf(body, "<html><title>Tiny Error</title>");
     sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
     sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
     sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
     sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
 
-    /* HTTP 응답 전송 */
-    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+    /* HTTP 응답 작성 */
+    sprintf(buf, "%s %s %s\r\n", version, errnum, shortmsg); // 요청한 HTTP 버전에 맞춘 응답
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Content-type: text/html\r\n");
     Rio_writen(fd, buf, strlen(buf));
