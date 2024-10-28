@@ -1,13 +1,24 @@
-<html>
-<head><title>test</title></head>
-<body> 
-<img align="middle" src="godzilla.gif">
-Dave O'Hallaron
-<!-- 비디오 파일을 위한 HTML5 video 태그 -->
-<h2>CSAPP 11.7</h2>
-<video width="640" height="360" controls>
-    <source src="sample.mov" type="video/mp4">
-    Your browser does not support the video tag.
-</video>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adder CGI Program</title>
+</head>
+<body>
+    <h1>This is CSAPP 11</h1>
+    <video width="640" height="360" controls>
+        <source src="sample.mov" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <!-- 숫자 두 개를 입력받아 GET으로 adder한테 요청 -->
+    <form action="/cgi-bin/adder" method="get">
+        <label for="num1">Enter number:</label>
+        <input type="text" id="num1" name="num1"><br>
+        <label for="num2">Enter number:</label>
+        <input type="text" id="num2" name="num2"><br>        
+        <input type="submit" value="Add Numbers">
+    </form>
 </body>
 </html>
