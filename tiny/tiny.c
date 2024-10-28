@@ -6,6 +6,7 @@
  * CSAPP 11.6-c 문제 - TINY의 출력을 조사해서 여러분이 사용하는 브라우저의 HTTP 버전을 결정하라.
  * CSAPP 11.7 문제 - TINY를 확장해서 MPG 비디오 파일을 처리하도록 하시오. 실제 브라우저를 사용해서 여러분의 결과를 체크하시오.
  * CSAPP 11.9 문제 - 정적 컨텐츠를 처리할 때 요청한 파일을 malloc, rio_readn, rio_writen을 사용해서 연결 식별자에게 복사하도록 하시오.
+ * CSAPP 11.10 문제 - 브라우저에서 숫자 2개를 입력하면 이를 get 메소드를 사용해서 컨텐츠를 요청하도록 하시오.
  */
 #include "csapp.h"
 
@@ -87,7 +88,7 @@ void doit(int fd)
     /* 요청 헤더 읽기 */
     read_requesthdrs(&rio);
 
-    /* URI를 파싱하여 파일 이름 및 CGI 인자 추출 */
+    /* URI를 파싱하여 파일 이름, CGI 인자 추출 */
     is_static = parse_uri(uri, filename, cgiargs);
     if (stat(filename, &sbuf) < 0) {
         clienterror(fd, filename, "404", "Not found",
@@ -134,31 +135,30 @@ void read_requesthdrs(rio_t *rp)
 /*
  * parse_uri - URI를 파일 이름과 CGI 인자로 구문 분석
  *             동적 0, 정적 1 반환
+ * url에서 숫자 두개 추출하여 서버로 보내기
  */
 int parse_uri(char *uri, char *filename, char *cgiargs) 
 {
     char *ptr;
 
-    /* 정적 */
-    if (!strstr(uri, "cgi-bin")) {
-        strcpy(cgiargs, "");                   
-        strcpy(filename, ".");                  
-        strcat(filename, uri);                  
-        if (uri[strlen(uri)-1] == '/')         
-            strcat(filename, "home.html");   
+    if (!strstr(uri, "cgi-bin")) {  /* 정적 콘텐츠 */
+        strcpy(cgiargs, "");
+        strcpy(filename, ".");
+        strcat(filename, uri);
+        if (uri[strlen(uri)-1] == '/')                   
+            strcat(filename, "home.html");               
         return 1;
     }
-    /* 동적 */
-    else {                                              
-        ptr = index(uri, '?');                       
+    else {  /* 동적 콘텐츠 */
+        ptr = strchr(uri, '?');  /* URI에서 '?'를 찾아 쿼리 문자열을 분리 */
         if (ptr) {
-            strcpy(cgiargs, ptr+1);
+            strcpy(cgiargs, ptr + 1);  /* '?' 다음의 쿼리 문자열을 cgiargs에 복사 */
             *ptr = '\0';
         }
         else 
-            strcpy(cgiargs, "");                    
-        strcpy(filename, ".");                       
-        strcat(filename, uri);                     
+            strcpy(cgiargs, "");  /* 쿼리 문자열이 없을 때 cgiargs를 빈 문자열로 설정 */
+        strcpy(filename, ".");
+        strcat(filename, uri);  /* 파일 이름으로 URI 설정 */
         return 0;
     }
 }
@@ -172,7 +172,7 @@ void serve_static(int fd, char *filename, int filesize, char *version)
     char *srcp;
     char filetype[MAXLINE], buf[MAXBUF];
 
-    /* 파일 타입 결정 및 응답 헤더 작성 */
+    /* 파일 타입 결정, 응답 헤더 작성 */
     get_filetype(filename, filetype);
     sprintf(buf, "%s 200 OK\r\n", version); // 요청한 HTTP 버전에 맞춘 응답
     sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
@@ -225,21 +225,23 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *version)
 {
     char buf[MAXLINE], *emptylist[] = { NULL };
 
-    /* HTTP 응답 헤더의 첫 부분 전송 */
-    sprintf(buf, "%s 200 OK\r\n", version); // 요청한 HTTP 버전에 맞춰 응답
+    /* HTTP 응답 헤더 작성 */
+    sprintf(buf, "%s 200 OK\r\n", version);  // 요청된 HTTP 버전으로 응답
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Server: Tiny Web Server\r\n");
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Connection: close\r\n");
     Rio_writen(fd, buf, strlen(buf));
-  
-    if (Fork() == 0) { /* 자식 프로세스 생성 */ 
-        /* CGI 환경 변수 설정 */
-        setenv("QUERY_STRING", cgiargs, 1);
-        Dup2(fd, STDOUT_FILENO);              /* 클라이언트로 표준 출력을 리다이렉트 */ 
-        Execve(filename, emptylist, environ); /* CGI 프로그램 실행 */ 
+    sprintf(buf, "Content-type: text/html\r\n\r\n");
+    Rio_writen(fd, buf, strlen(buf));
+
+    /* 자식 프로세스 생성 및 CGI 프로그램 실행 */
+    if (Fork() == 0) { 
+        setenv("QUERY_STRING", cgiargs, 1);  /* 쿼리 문자열을 QUERY_STRING 환경 변수로 설정 */
+        Dup2(fd, STDOUT_FILENO);  /* 표준 출력을 클라이언트 소켓으로 리다이렉트 */
+        Execve(filename, emptylist, environ);  /* CGI 프로그램 실행 */
     }
-    Wait(NULL); /* 부모 프로세스는 자식 프로세스 종료 대기 */
+    Wait(NULL);  /* 부모 프로세스는 자식 프로세스 종료를 기다림 */
 }
 
 /*
