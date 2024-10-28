@@ -5,7 +5,7 @@
  * 
  * CSAPP 11.6-c 문제 - TINY의 출력을 조사해서 여러분이 사용하는 브라우저의 HTTP 버전을 결정하라.
  * CSAPP 11.7 문제 - TINY를 확장해서 MPG 비디오 파일을 처리하도록 하시오. 실제 브라우저를 사용해서 여러분의 결과를 체크하시오.
- * 
+ * CSAPP 11.9 문제 - 정적 컨텐츠를 처리할 때 요청한 파일을 malloc, rio_readn, rio_writen을 사용해서 연결 식별자에게 복사하도록 하시오.
  */
 #include "csapp.h"
 
@@ -169,31 +169,36 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 void serve_static(int fd, char *filename, int filesize, char *version) 
 {
     int srcfd;
-    char *srcp, filetype[MAXLINE], buf[MAXBUF];
+    char *srcp;
+    char filetype[MAXLINE], buf[MAXBUF];
 
     /* 파일 타입 결정 및 응답 헤더 작성 */
     get_filetype(filename, filetype);
-    sprintf(buf, "%s 200 OK\r\n", version);
+    sprintf(buf, "%s 200 OK\r\n", version); // 요청한 HTTP 버전에 맞춘 응답
     sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
     sprintf(buf, "%sConnection: close\r\n", buf);
     sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-    sprintf(buf, "%sContent-type: %s\r\n", buf, filetype);
-
-    /* 비디오 파일을 브라우저에 표시하도록 Content-Disposition 헤더 추가 */
-    if (strcmp(filetype, "video/mov") == 0) {
-        sprintf(buf, "%sContent-Disposition: inline\r\n", buf);
-    }
-    
-    sprintf(buf, "%s\r\n", buf);
+    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
     Rio_writen(fd, buf, strlen(buf));
 
-    /* 파일을 메모리에 매핑하여 클라이언트에게 전송 */
+    /* 파일을 열고 메모리 할당 */
     srcfd = Open(filename, O_RDONLY, 0);
-    srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+    srcp = (char *)malloc(filesize); // 요청된 파일 크기만큼 메모리 할당
+    if (srcp == NULL) { // 메모리 할당 오류 처리
+        Close(srcfd);
+        clienterror(fd, filename, "500", "Internal Server Error", "Tiny couldn't allocate memory", version);
+        return;
+    }
+
+    /* 파일 내용을 메모리로 읽어오기 */
+    Rio_readn(srcfd, srcp, filesize);
     Close(srcfd);
+
+    /* 클라이언트에게 파일 내용 전송 */
     Rio_writen(fd, srcp, filesize);
-    Munmap(srcp, filesize);
+    free(srcp); // 동적 메모리 해제
 }
+
 /*
  * get_filetype - 파일 이름으로부터 파일 타입을 결정
  */
