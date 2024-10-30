@@ -96,3 +96,16 @@ sprintf를 사용해 클라이언트에 보낼 HTML 콘텐츠를 작성한다. �
 3. HTTP 응답 출력
 HTTP 응답 헤더와 콘텐츠를 printf를 사용해 출력한다. Content-length와 Content-type 헤더를 설정하고, Content-type: text/html로 HTML 형식임을 지정한다.
 마지막에 fflush(stdout);을 사용해 버퍼를 비운 후, exit(0);으로 프로그램을 종료한다.
+
+### CSAPP 11.10 문제
+#### http head 메소드를 지원하도록 하라. telnet을 웹 클라이언트로 사용해서 작업 결과를 테크하시오.
+
+1. doit 함수에서 HEAD 메서드 처리:
+HEAD 메서드를 감지하고, is_head 플래그를 설정하여 GET과 구분.
+is_head 플래그는 serve_static과 serve_dynamic 함수로 전달하여 콘텐츠 본문 전송 여부를 결정.
+
+2. serve_static 함수 수정:
+is_head가 설정된 경우, 응답 헤더만 전송하고 파일 내용은 전송하지 않음.
+
+3. serve_dynamic 함수 수정:
+is_head가 설정된 경우, CGI 프로그램을 실행하지 않고 응답 헤더만 전송.

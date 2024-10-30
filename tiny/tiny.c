@@ -7,6 +7,8 @@
  * CSAPP 11.7 문제 - TINY를 확장해서 MPG 비디오 파일을 처리하도록 하시오. 실제 브라우저를 사용해서 여러분의 결과를 체크하시오.
  * CSAPP 11.9 문제 - 정적 컨텐츠를 처리할 때 요청한 파일을 malloc, rio_readn, rio_writen을 사용해서 연결 식별자에게 복사하도록 하시오.
  * CSAPP 11.10 문제 - 브라우저에서 숫자 2개를 입력하면 이를 get 메소드를 사용해서 컨텐츠를 요청하도록 하시오.
+ * CSAPP 11.11 문제 - http head 메소드를 지원하도록 하라. telnet을 웹 클라이언트로 사용해서 작업 결과를 테크하시오.
+ * 
  */
 #include "csapp.h"
 
@@ -15,10 +17,10 @@ void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 // void serve_static(int fd, char *filename, int filesize); // 기존 함수
-void serve_static(int fd, char *filename, int filesize, char *version);
+void serve_static(int fd, char *filename, int filesize, char *version, int is_head);
 void get_filetype(char *filename, char *filetype);
 // void serve_dynamic(int fd, char *filename, char *cgiargs); // 기존 함수
-void serve_dynamic(int fd, char *filename, char *cgiargs, char *version);
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *version, int is_head);
 // void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg); // 기존 함수
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, 
                     char *longmsg, char *version); 
@@ -65,6 +67,7 @@ void doit(int fd)
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char filename[MAXLINE], cgiargs[MAXLINE];
     rio_t rio;
+    int is_head = 0; // HEAD 메서드 플래그
 
     /* 요청 라인과 헤더를 읽음 */
     Rio_readinitb(&rio, fd);
@@ -73,22 +76,20 @@ void doit(int fd)
     printf("%s", buf); // 요청 라인 출력
 
     /* 메서드, URI, HTTP 버전을 파싱 */
-    sscanf(buf, "%s %s %s", method, uri, version); // HTTP 버전 파싱 추가
+    sscanf(buf, "%s %s %s", method, uri, version);
 
-    /* HTTP 버전 출력 */
-    printf("Client HTTP version: %s\n", version);
-
-    /* 지원되지 않는 메서드 오류 처리 */
-    if (strcasecmp(method, "GET")) {                     
+    /* HEAD 메서드인지 확인 */
+    if (strcasecmp(method, "HEAD") == 0) {
+        is_head = 1; // HEAD 메서드일 경우 플래그 설정
+    } else if (strcasecmp(method, "GET") != 0) {
         clienterror(fd, method, "501", "Not Implemented",
                     "Tiny does not implement this method", version);
         return;
     }
-    
-    /* 요청 헤더 읽기 */
+
     read_requesthdrs(&rio);
 
-    /* URI를 파싱하여 파일 이름, CGI 인자 추출 */
+    /* URI를 파싱하여 파일 이름 및 CGI 인자 추출 */
     is_static = parse_uri(uri, filename, cgiargs);
     if (stat(filename, &sbuf) < 0) {
         clienterror(fd, filename, "404", "Not found",
@@ -103,7 +104,7 @@ void doit(int fd)
                         "Tiny couldn't read the file", version);
             return;
         }
-        serve_static(fd, filename, sbuf.st_size, version); // 수정: version 추가
+        serve_static(fd, filename, sbuf.st_size, version, is_head);
     }
     else {
         if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
@@ -111,7 +112,7 @@ void doit(int fd)
                         "Tiny couldn't run the CGI program", version);
             return;
         }
-        serve_dynamic(fd, filename, cgiargs, version); // 수정: version 추가
+        serve_dynamic(fd, filename, cgiargs, version, is_head);
     }
 }
 
@@ -166,7 +167,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 /*
  * serve_static - 파일을 클라이언트에게 전송하여 정적 콘텐츠 제공
  */
-void serve_static(int fd, char *filename, int filesize, char *version) 
+void serve_static(int fd, char *filename, int filesize, char *version, int is_head) 
 {
     int srcfd;
     char *srcp;
@@ -180,6 +181,9 @@ void serve_static(int fd, char *filename, int filesize, char *version)
     sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
     sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
     Rio_writen(fd, buf, strlen(buf));
+
+    /* HEAD 요청이면 파일 내용은 전송하지 않음 */
+    if (is_head) return;
 
     /* 파일을 열고 메모리 할당 */
     srcfd = Open(filename, O_RDONLY, 0);
@@ -221,7 +225,7 @@ void get_filetype(char *filename, char *filetype)
 /*
  * serve_dynamic - CGI 프로그램을 실행하여 동적 콘텐츠 제공
  */
-void serve_dynamic(int fd, char *filename, char *cgiargs, char *version) 
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *version, int is_head) 
 {
     char buf[MAXLINE], *emptylist[] = { NULL };
 
@@ -234,6 +238,9 @@ void serve_dynamic(int fd, char *filename, char *cgiargs, char *version)
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Content-type: text/html\r\n\r\n");
     Rio_writen(fd, buf, strlen(buf));
+
+    /* HEAD 요청이면 CGI 프로그램 실행 생략 */
+    if (is_head) return;
 
     /* 자식 프로세스 생성 및 CGI 프로그램 실행 */
     if (Fork() == 0) { 
